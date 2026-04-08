@@ -1,4 +1,4 @@
-# Video Bitrate Viewer
+# HTML Video Bitrate Viewer
 
 A lightweight local tool to visualize per-frame bitrate from FFprobe JSON output when you can't install software.
 
