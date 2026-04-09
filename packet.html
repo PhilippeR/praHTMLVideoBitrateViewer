@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Bitrate Analyser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js"></script>
+<style>
+
+
+  :root {
+    --bg:      #0d0f0e;
+    --surface: #141614;
+    --panel:   #1a1d1a;
+    --border:  rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text:    #e8ebe4;
+    --muted:   #e8ebe4;
+    --accent:  #7fff6a;
+    --blue:    #4f9cf9;
+    --orange:  #f97b4f;
+    --green:   #6adf9e;
+    --avg:     #f9cf4f;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+    --r:       6px;
+    --r-lg:    10px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+    line-height: 1.5;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+  .header span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 1px dashed var(--border2);
+    border-radius: var(--r-lg);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    margin-bottom: 1rem;
+    background: var(--surface);
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    background: var(--panel);
+    border-color: rgba(127,255,106,0.3);
+  }
+  .drop-icon {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(127,255,106,0.1);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 15px;
+    color: var(--accent);
+  }
+  .drop-text strong {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .drop-text small {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* CMD BOX */
+  .cmd-box {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.65rem 1rem;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+    line-height: 1.9;
+    word-break: break-all;
+  }
+  .cmd-box .kw { color: var(--accent); }
+  .cmd-box .fl { color: var(--blue); }
+  .cmd-box .cm { color: white; }
+
+  /* TOOLBAR */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 0.6rem 1rem;
+  }
+  .toolbar-sep {
+    width: 1px; height: 20px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctrl-group label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 88px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border2);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+  }
+  .ctrl-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    min-width: 28px;
+  }
+  select {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: var(--r);
+    border: 1px solid var(--border2);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+  }
+
+  /* FRAME TOGGLES */
+  .frame-toggles { display: flex; gap: 5px; }
+  .ftoggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .ftoggle .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .ftoggle.active-I { color: var(--orange); border-color: var(--orange); background: rgba(249,123,79,0.1); }
+  .ftoggle.active-P { color: var(--blue);   border-color: var(--blue);   background: rgba(79,156,249,0.1); }
+  .ftoggle.active-B { color: var(--green);  border-color: var(--green);  background: rgba(106,223,158,0.1); }
+
+  /* ZOOM BUTTONS */
+  .zoom-group { display: flex; gap: 4px; margin-left: auto; }
+  .zbtn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: var(--r);
+    border: 1px solid var(--border2);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.12s;
+    letter-spacing: 0.04em;
+  }
+  .zbtn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+  .zbtn.reset { color: var(--accent); border-color: rgba(127,255,106,0.3); }
+  .zbtn.reset:hover { background: rgba(127,255,106,0.08); }
+
+  /* STATS */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 6px;
+    margin-bottom: 1rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.55rem 0.85rem;
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .sv-accent { color: var(--accent); }
+  .sv-blue   { color: var(--blue); }
+  .sv-orange { color: var(--orange); }
+
+  /* STATUS */
+  #status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    min-height: 14px;
+    letter-spacing: 0.02em;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+    align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .legend-swatch.dot { border-radius: 50%; }
+  .legend-dash { width: 16px; height: 0; border-top: 2px dashed #f9cf4f; flex-shrink: 0; }
+
+  /* CHART */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 1rem 1.25rem 0.75rem;
+  }
+  .chart-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: #3a3f3a;
+    margin-top: 0.5rem;
+    letter-spacing: 0.04em;
+  }
+  .chart-wrapper {
+    position: relative;
+    width: 100%;
+    height: 380px;
+  }
+</style>
+</head>
+<body>
+
+<div style="max-width:1100px;margin:0 auto;">
+
+  <div class="header">
+    <h1>VIDEO BITRATE ANALYSER</h1>
+    <span>sliding window smoothing · I / P / B frames · zoom + pan</span>
+  </div>
+
+  <div class="cmd-box">
+    <span class="cm"># Generate result.json with FFprobe</span><br>
+    <span class="kw">ffprobe</span>
+    <span class="fl">-v</span> quiet
+    <span class="fl">-select_streams</span> v:0
+    <span class="fl">-show_entries</span> packet
+    <span class="fl">-of</span> json
+    input.mp4 &gt; result.json
+  </div>
+
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="drop-icon">↓</div>
+    <div class="drop-text">
+      <strong>Drop result.json here</strong>
+      <small>or click to choose a file</small>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+
+  <div class="toolbar">
+    <div class="ctrl-group">
+      <label>Smoothing</label>
+      <input type="range" id="windowSize" min="1" max="10" value="1" step="1">
+      <span class="ctrl-val" id="windowLabel">1 s</span>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="ctrl-group">
+      <label>Unit</label>
+      <select id="unitSelect">
+        <option value="kbps">kbps</option>
+        <option value="mbps">Mbps</option>
+      </select>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="zoom-group">
+      <button class="zbtn" onclick="zoomIn()">＋ zoom</button>
+      <button class="zbtn" onclick="zoomOut()">－ zoom</button>
+      <button class="zbtn reset" onclick="resetZoom()">↺ Reset</button>
+    </div>
+  </div>
+
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="chart-card">
+    <div class="legend">
+      <span class="legend-item">
+        <span class="legend-swatch" style="background:#4f9cf9;"></span>Smoothed bitrate
+      </span>
+      <span class="legend-item">
+        <span class="legend-dash"></span>Average
+      </span>
+    </div>
+    <div id="status">Demo data — drop your result.json to analyze a real file.</div>
+    <div class="chart-wrapper">
+      <canvas id="bitrateChart"></canvas>
+    </div>
+    <div class="chart-hint">Wheel = zoom · Click + drag = pan · Reset = full view</div>
+  </div>
+
+</div>
+
+<script>
+/* ── State ── */
+let chartInstance = null;
+let rawFrames     = [];
+
+/* ── DOM ── */
+const dropZone     = document.getElementById('dropZone');
+const fileInput    = document.getElementById('fileInput');
+const windowSlider = document.getElementById('windowSize');
+const windowLabel  = document.getElementById('windowLabel');
+const unitSelect   = document.getElementById('unitSelect');
+const statusEl     = document.getElementById('status');
+const statsRow     = document.getElementById('statsRow');
+
+/* ── Drop / File events ── */
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) readFile(fileInput.files[0]); });
+windowSlider.addEventListener('input', () => {
+  windowLabel.textContent = windowSlider.value + ' s';
+  if (rawFrames.length) renderChart(rawFrames);
+});
+unitSelect.addEventListener('change', () => { if (rawFrames.length) renderChart(rawFrames); });
+
+
+
+/* ── Read file ── */
+function readFile(file) {
+  statusEl.textContent = 'Loading…';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      rawFrames = parseFrames(json);
+      if (!rawFrames.length) throw new Error('No valid frames found.');
+      statusEl.textContent = rawFrames.length.toLocaleString('en-US') + ' frames — ' + file.name;
+      renderChart(rawFrames);
+    } catch(err) {
+      statusEl.textContent = 'Error: ' + err.message;
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ── Parse FFprobe JSON ── */
+function parseFrames(json) {
+  const items = json.packets || [];
+  const result = [];
+  for (const item of items) {
+    const t    = parseFloat(item.pts_time);
+    const sz   = parseInt(item.size, 10);
+    if (!isNaN(t) && !isNaN(sz) && sz > 0) result.push({ t, sz });
+  }
+  return result.sort((a, b) => a.t - b.t);
+}
+
+/* ── Sliding window smoothing ──
+   For each frame f_i centered at t_i:
+     bitrate(t_i) = Σ sz over [t_i - W/2, t_i + W/2] × 8 bits / W seconds
+   Result in bits/s, then converted to the selected unit.
+── */
+function slidingBitrate(frames, windowSec, divisor) {
+  const half = windowSec / 2;
+  const n    = frames.length;
+  const bps  = new Float64Array(n);
+  let lo = 0, hi = 0, windowBytes = 0;
+
+  for (let i = 0; i < n; i++) {
+    const center = frames[i].t;
+    const tMin   = center - half;
+    const tMax   = center + half;
+
+    while (hi < n && frames[hi].t <= tMax) { windowBytes += frames[hi].sz; hi++; }
+    while (lo < n && frames[lo].t < tMin)  { windowBytes -= frames[lo].sz; lo++; }
+
+    bps[i] = (windowBytes * 8) / windowSec / divisor;
+  }
+  return bps;
+}
+
+/* ── Render ── */
+function renderChart(frames) {
+  const win       = parseInt(windowSlider.value, 10);
+  const unit      = unitSelect.value;
+  const divisor   = unit === 'mbps' ? 1_000_000 : 1_000;
+  const unitLabel = unit === 'mbps' ? 'Mbps' : 'kbps';
+  const unitDec   = unit === 'mbps' ? 3 : 1;
+
+  /* Smoothed series */
+  const smoothed  = slidingBitrate(frames, win, divisor);
+  const tFull     = frames.map(f => f.t);
+  const duration  = tFull[tFull.length - 1];
+
+  /* Downsample line for perf (max 3000 pts) */
+  const MAX_LINE = 3000;
+  const stepLine = Math.max(1, Math.floor(frames.length / MAX_LINE));
+  const lineData = [];
+  for (let i = 0; i < frames.length; i += stepLine) {
+    lineData.push({ x: parseFloat(tFull[i].toFixed(3)), y: parseFloat(smoothed[i].toFixed(unitDec + 1)) });
+  }
+
+  /* Stats */
+  const allY    = lineData.map(d => d.y);
+  const nonZero = allY.filter(v => v > 0);
+  const avg     = nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
+  const peak    = Math.max(...allY);
+  const minV    = Math.min(...nonZero);
+
+  statsRow.innerHTML = [
+    ['MOY',      avg.toFixed(2)  + '\u00a0' + unitLabel, 'sv-accent'],
+    ['CRÊTE',    peak.toFixed(2) + '\u00a0' + unitLabel, 'sv-blue'],
+    ['MIN',      minV.toFixed(2) + '\u00a0' + unitLabel, ''],
+    ['DURÉE',    duration.toFixed(1) + '\u00a0s', ''],
+    ['PAQUETS',  frames.length.toLocaleString('fr'), 'sv-orange'],
+  ].map(([l, v, cls]) =>
+    `<div class="stat-card">
+       <div class="stat-label">${l}</div>
+       <div class="stat-value ${cls}">${v}</div>
+     </div>`
+  ).join('');
+
+
+
+  const gridColor = 'rgba(255,255,255,0.05)';
+  const textColor = '#6b706a';
+  const monoFont  = "'DM Mono', monospace";
+
+  const datasets = [
+    {
+      type: 'line',
+      label: 'Smoothed bitrate (' + unitLabel + ')',
+      data: lineData,
+      borderColor: '#4f9cf9',
+      backgroundColor: 'rgba(79,156,249,0.06)',
+      fill: true,
+      tension: 0.35,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      yAxisID: 'yBit',
+      order: 1,
+    },
+    {
+      type: 'line',
+      label: 'Average',
+      data: [
+        { x: tFull[0],        y: parseFloat(avg.toFixed(unitDec + 1)) },
+        { x: tFull[tFull.length - 1], y: parseFloat(avg.toFixed(unitDec + 1)) }
+      ],
+      borderColor: '#f9cf4f',
+      borderDash: [6, 4],
+      borderWidth: 1.2,
+      pointRadius: 0,
+      fill: false,
+      yAxisID: 'yBit',
+      order: 0,
+    },
+  ];
+
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(document.getElementById('bitrateChart'), {
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d1a',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#6b706a',
+          bodyColor: '#e8ebe4',
+          titleFont: { family: monoFont, size: 10 },
+          bodyFont:  { family: monoFont, size: 11 },
+          padding: 10,
+          callbacks: {
+            title: items => 't = ' + (items[0].raw?.x ?? 0).toFixed(3) + ' s',
+            label: item => item.dataset.label + ' : ' + item.raw.y.toFixed(unitDec + 1) + ' ' + unitLabel,
+          }
+        },
+        zoom: {
+          pan: {
+            enabled: true,
+            mode: 'x',
+          },
+          zoom: {
+            wheel: { enabled: true, speed: 0.1 },
+            pinch: { enabled: true },
+            mode: 'x',
+          },
+          limits: {
+            x: { min: tFull[0], max: duration, minRange: 0.5 }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          position: 'bottom',
+          min: tFull[0],
+          max: duration,
+          title: {
+            display: true,
+            text: 'Time (s)',
+            color: textColor,
+            font: { family: monoFont, size: 11 }
+          },
+          ticks: {
+            color: textColor,
+            font: { family: monoFont, size: 10 },
+            maxTicksLimit: 10,
+            callback: v => v.toFixed(1) + ' s'
+          },
+          grid: { color: gridColor },
+        },
+        yBit: {
+          type: 'linear',
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Smoothed bitrate (' + unitLabel + ')',
+            color: '#4f9cf9',
+            font: { family: monoFont, size: 11 }
+          },
+          ticks: {
+            color: '#4f9cf9',
+            font: { family: monoFont, size: 10 },
+            callback: v => v.toFixed(unit === 'mbps' ? 2 : 0) + ' ' + unitLabel,
+          },
+          grid: { color: gridColor },
+          min: 0,
+        }
+      }
+    }
+  });
+}
+
+/* ── Zoom controls ── */
+function zoomIn()    { if (chartInstance) chartInstance.zoom(1.5); }
+function zoomOut()   { if (chartInstance) chartInstance.zoom(0.67); }
+function resetZoom() { if (chartInstance) chartInstance.resetZoom(); }
+
+/* ── Demo data ── */
+(function loadDemo() {
+  const fps = 25, duration = 120;
+  const packets = [];
+  for (let i = 0; i < duration * fps; i++) {
+    const t     = i / fps;
+    const scene = Math.floor(t / 20) % 4;
+    const base  = [8000, 25000, 5000, 18000][scene];
+    const noise = (Math.random() - 0.5) * base * 0.55;
+    const sz    = Math.max(150, Math.round(base + noise));
+    packets.push({ pts_time: parseFloat(t.toFixed(4)), size: sz });
+  }
+  rawFrames = parseFrames({ packets });
+  renderChart(rawFrames);
+})();
+</script>
+</body>
+</html>
